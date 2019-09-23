@@ -249,7 +249,7 @@ static void get_time_and_accumulate(perfcounter_t *accumulate_cycles, perfcounte
 {
     perfcounter_t current_cycles = perfcounter_get();
     if (current_cycles < *last_cycles) {
-        *accumulate_cycles = *accumulate_cycles + (1 << 36);
+            *accumulate_cycles = *accumulate_cycles + (((u64)1) << 36);
     }
     *last_cycles = current_cycles;
 }
