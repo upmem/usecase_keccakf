@@ -11,7 +11,6 @@
 
 #include "keccakf_dpu_params.h"
 #include <dpu.h>
-#include <dpu_log.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
