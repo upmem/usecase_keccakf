@@ -10,7 +10,7 @@
  */
 
 #include "keccakf_dpu_params.h"
-#include <dpu_api.h>
+#include <dpu.h>
 #include <dpu_log.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -26,29 +26,13 @@ double dml_micros()
     return ((tv.tv_sec * 1000000.0) + tv.tv_usec);
 }
 
-static int init_dpus(struct dpu_rank_t **rank)
+static void init_dpus(struct dpu_rank_t **rank)
 {
-    if (dpu_alloc(NULL, rank) != DPU_API_SUCCESS)
-        return -1;
-
-    if (dpu_load_all(*rank, DPU_BINARY) != DPU_API_SUCCESS) {
-        dpu_free(*rank);
-        return -1;
-    }
-
-    return 0;
+    DPU_ASSERT(dpu_alloc(NULL, rank));
+    DPU_ASSERT(dpu_load_all(*rank, DPU_BINARY));
 }
 
-static int run_dpus(struct dpu_rank_t *rank, uint32_t nr_of_dpus)
-{
-    int res = 0;
-
-    dpu_api_status_t status = dpu_boot_all(rank, SYNCHRONOUS);
-    if (status != DPU_API_SUCCESS)
-        return -1;
-
-    return res;
-}
+static void run_dpus(struct dpu_rank_t *rank, uint32_t nr_of_dpus) { DPU_ASSERT(dpu_boot_all(rank, SYNCHRONOUS)); }
 
 int main(int argc, char **argv)
 {
@@ -62,18 +46,17 @@ int main(int argc, char **argv)
     unsigned int t, i, idx;
     int res = -1;
 
-    if (init_dpus(&rank) != 0) {
-        fprintf(stderr, "ERR: cannot initialize DPUs\n");
-        return -1;
-    }
-    if (dpu_get_nr_of_dpus_in(rank, &nr_of_dpus) != DPU_API_SUCCESS)
-        goto err;
+    init_dpus(&rank);
+
+    DPU_ASSERT(dpu_get_nr_of_dpus_in(rank, &nr_of_dpus));
     nr_of_tasklets = nr_of_dpus * NR_TASKLETS;
     printf("Allocated %d DPU(s) x %d Threads\n", nr_of_dpus, NR_TASKLETS);
 
     /* send parameters to the DPU tasklets */
     idx = 0;
     DPU_FOREACH (rank, dpu) {
+        struct dpu_symbol_t tasklet_params;
+        DPU_ASSERT(dpu_get_symbol(dpu_get_runtime_context(dpu), "tasklet_params", &tasklet_params));
         struct dpu_params params;
         params.loops = loops;
         for (t = 0; t < NR_TASKLETS; t++, idx++) {
@@ -82,19 +65,13 @@ int main(int argc, char **argv)
             if (params.lkey > lkey)
                 params.lkey = lkey;
             printf(" Thread %02d-%02d %d->%d\n", idx / NR_TASKLETS, t, params.fkey, params.lkey);
-            if (dpu_tasklet_post(dpu, t, 0, (uint32_t *)&params, sizeof(params)) != DPU_API_SUCCESS) {
-                fprintf(stderr, "ERR: cannot write mailbox\n");
-                goto err;
-            }
+            DPU_ASSERT(dpu_copy_symbol_to(dpu, tasklet_params, t * sizeof(params), (const uint8_t *)&params, sizeof(params)));
         }
     }
 
     printf("Run program on DPU(s)\n");
     double micros = dml_micros();
-    if (run_dpus(rank, nr_of_dpus) != 0) {
-        goto err;
-        fprintf(stderr, "ERR: cannot execute program correctly\n");
-    }
+    run_dpus(rank, nr_of_dpus);
     micros -= dml_micros();
 
     printf("Retrieve results\n");
@@ -107,13 +84,12 @@ int main(int argc, char **argv)
     i = 0;
     DPU_FOREACH (rank, dpu) {
         /* Retrieve tasklet results and compute the final keccak. */
+        struct dpu_symbol_t tasklet_results;
+        DPU_ASSERT(dpu_get_symbol(dpu_get_runtime_context(dpu), "tasklet_results", &tasklet_results));
         for (t = 0; t < NR_TASKLETS; t++) {
             struct dpu_result tasklet_result = { 0 };
-            if (dpu_tasklet_receive(dpu, t, 0, (uint32_t *)&tasklet_result, sizeof(tasklet_result)) != DPU_API_SUCCESS) {
-                fprintf(stderr, "ERR: cannot receive DPU results correctly\n");
-                free(results);
-                goto err;
-            }
+            DPU_ASSERT(dpu_copy_symbol_from(
+                dpu, tasklet_results, t * sizeof(tasklet_result), (uint8_t *)&tasklet_result, sizeof(tasklet_result)));
             results[i].sum ^= tasklet_result.sum;
             if (tasklet_result.cycles > results[i].cycles)
                 results[i].cycles = tasklet_result.cycles;
@@ -140,10 +116,6 @@ int main(int argc, char **argv)
     res = 0;
 
 err:
-    if (dpu_free(rank) != DPU_API_SUCCESS) {
-        fprintf(stderr, "ERR: cannot free DPUs\n");
-        res = -1;
-    }
-
+    DPU_ASSERT(dpu_free(rank));
     return res;
 }

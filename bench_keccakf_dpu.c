@@ -25,15 +25,16 @@
 
 #include "keccakf_dpu_params.h"
 #include <defs.h>
-#include <mbox.h>
 #include <perfcounter.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <sys.h>
 
 // Create a system with NR_TASKLETS tasklets (0 to NR_TASKLETS-1) to compute individual checksums
-#define TASKLETS_INITIALIZER TASKLETS(NR_TASKLETS, task_main, 512, 4)
+#define TASKLETS_INITIALIZER TASKLETS(NR_TASKLETS, task_main, 512, 0)
 #include <rt.h>
+
+struct dpu_params tasklet_params[NR_TASKLETS];
+struct dpu_result tasklet_results[NR_TASKLETS];
 
 typedef uint64_t u64;
 
@@ -284,7 +285,7 @@ static u64 scramble(u64 key, int loops, perfcounter_t *cycles, perfcounter_t *la
 int task_main()
 {
     uint32_t tid = me();
-    struct dpu_params *params = mbox_recv();
+    struct dpu_params *params = tasklet_params + tid;
     u64 sum = 0;
     perfcounter_t cycles = 0, last_cycles = 0;
 
@@ -299,8 +300,10 @@ int task_main()
 
     /* Send the resulting keccak and cycles count to host application. */
     get_time_and_accumulate(&cycles, &last_cycles);
-    struct dpu_result result = { .sum = sum, .cycles = cycles + last_cycles };
-    mbox_send(&result, sizeof(result));
+
+    struct dpu_result *result = tasklet_results + tid;
+    result->sum = sum;
+    result->cycles = cycles + last_cycles;
 
     return 0;
 }
