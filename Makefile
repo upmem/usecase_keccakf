@@ -1,7 +1,5 @@
 #Compiler and Linker (LLVM)
-CC          := dpu-upmem-dpurte-clang
-#Host Compiler and Linker
-HOST_CC     ?= gcc
+DPU_CC      := dpu-upmem-dpurte-clang
 #pkg-config configuration helper tool
 PKG_CONFIG  ?= dpu-pkg-config
 
@@ -52,11 +50,11 @@ check-format: ${CHECK_FORMAT_DEPENDENCIES}
 
 #Dpu binary
 $(DPU_EXE): $(DPU_SRCS) $(COMMON_INC)
-	$(CC) $(DPU_CFLAGS) -o $@ $(DPU_SRCS)
+	$(DPU_CC) $(DPU_CFLAGS) -o $@ $(DPU_SRCS)
 
 #Host binary
 $(HOST_EXE): $(HOST_SRCS) $(COMMON_INC)
-	$(HOST_CC) $(HOST_CFLAGS) -o $@ $(HOST_SRCS) $(HOST_LIB)
+	$(CC) $(HOST_CFLAGS) -o $@ $(HOST_SRCS) $(HOST_LIB)
 
 clean:
 	@$(RM) -rf $(BUILDDIR)
