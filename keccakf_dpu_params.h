@@ -14,7 +14,4 @@ struct dpu_result {
     uint64_t cycles;
 };
 
-/* Use 16 Tasklets/threads */
-#define NR_TASKLETS 16
-
 #endif /* KECCAK_DPU_PARAMS_H */

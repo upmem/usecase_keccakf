@@ -29,10 +29,6 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// Create a system with NR_TASKLETS tasklets (0 to NR_TASKLETS-1) to compute individual checksums
-#define TASKLETS_INITIALIZER TASKLETS(NR_TASKLETS, task_main, 512, 0)
-#include <rt.h>
-
 struct dpu_params tasklet_params[NR_TASKLETS];
 struct dpu_result tasklet_results[NR_TASKLETS];
 
@@ -282,7 +278,7 @@ static u64 scramble(u64 key, int loops, perfcounter_t *cycles, perfcounter_t *la
     return sum;
 }
 
-int task_main()
+int main()
 {
     uint32_t tid = me();
     struct dpu_params *params = tasklet_params + tid;

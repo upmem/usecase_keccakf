@@ -25,37 +25,31 @@ double dml_micros()
     return ((tv.tv_sec * 1000000.0) + tv.tv_usec);
 }
 
-static void init_dpus(struct dpu_rank_t **rank)
-{
-    DPU_ASSERT(dpu_alloc(NULL, rank));
-    DPU_ASSERT(dpu_load_all(*rank, DPU_BINARY));
-}
-
-static void run_dpus(struct dpu_rank_t *rank, uint32_t nr_of_dpus) { DPU_ASSERT(dpu_boot_all(rank, SYNCHRONOUS)); }
-
 int main(int argc, char **argv)
 {
     const uint64_t fkey = argc > 1 ? atoi(argv[1]) : 0; /* first key */
     const uint64_t lkey = argc > 2 ? atoi(argv[2]) : 1 << 10; /* last  key */
     const uint64_t loops = argc > 3 ? atoi(argv[3]) : 1 << 20; /* #loops    */
     const uint64_t nkey = lkey - fkey;
-    struct dpu_rank_t *rank;
-    struct dpu_t *dpu;
+    struct dpu_set_t dpus;
+    struct dpu_set_t dpu;
+    struct dpu_program_t *dpu_program;
     uint32_t nr_of_dpus, nr_of_tasklets;
     unsigned int t, i, idx;
     int res = -1;
 
-    init_dpus(&rank);
+    DPU_ASSERT(dpu_alloc(DPU_ALLOCATE_ALL, NULL, &dpus));
+    DPU_ASSERT(dpu_load(dpus, DPU_BINARY, &dpu_program));
 
-    DPU_ASSERT(dpu_get_nr_of_dpus_in(rank, &nr_of_dpus));
+    DPU_ASSERT(dpu_get_nr_dpus(dpus, &nr_of_dpus));
     nr_of_tasklets = nr_of_dpus * NR_TASKLETS;
     printf("Allocated %d DPU(s) x %d Threads\n", nr_of_dpus, NR_TASKLETS);
 
     /* send parameters to the DPU tasklets */
     idx = 0;
-    DPU_FOREACH (rank, dpu) {
+    DPU_FOREACH (dpus, dpu) {
         struct dpu_symbol_t tasklet_params;
-        DPU_ASSERT(dpu_get_symbol(dpu_get_runtime_context(dpu), "tasklet_params", &tasklet_params));
+        DPU_ASSERT(dpu_get_symbol(dpu_program, "tasklet_params", &tasklet_params));
         struct dpu_params params;
         params.loops = loops;
         for (t = 0; t < NR_TASKLETS; t++, idx++) {
@@ -64,13 +58,13 @@ int main(int argc, char **argv)
             if (params.lkey > lkey)
                 params.lkey = lkey;
             printf(" Thread %02d-%02d %d->%d\n", idx / NR_TASKLETS, t, params.fkey, params.lkey);
-            DPU_ASSERT(dpu_copy_symbol_to(dpu, tasklet_params, t * sizeof(params), (const uint8_t *)&params, sizeof(params)));
+            DPU_ASSERT(dpu_copy_to_symbol(dpu, tasklet_params, t * sizeof(params), (const uint8_t *)&params, sizeof(params)));
         }
     }
 
     printf("Run program on DPU(s)\n");
     double micros = dml_micros();
-    run_dpus(rank, nr_of_dpus);
+    DPU_ASSERT(dpu_launch(dpus, DPU_SYNCHRONOUS));
     micros -= dml_micros();
 
     printf("Retrieve results\n");
@@ -81,13 +75,13 @@ int main(int argc, char **argv)
     if (!results)
         goto err;
     i = 0;
-    DPU_FOREACH (rank, dpu) {
+    DPU_FOREACH (dpus, dpu) {
         /* Retrieve tasklet results and compute the final keccak. */
         struct dpu_symbol_t tasklet_results;
-        DPU_ASSERT(dpu_get_symbol(dpu_get_runtime_context(dpu), "tasklet_results", &tasklet_results));
+        DPU_ASSERT(dpu_get_symbol(dpu_program, "tasklet_results", &tasklet_results));
         for (t = 0; t < NR_TASKLETS; t++) {
             struct dpu_result tasklet_result = { 0 };
-            DPU_ASSERT(dpu_copy_symbol_from(
+            DPU_ASSERT(dpu_copy_from_symbol(
                 dpu, tasklet_results, t * sizeof(tasklet_result), (uint8_t *)&tasklet_result, sizeof(tasklet_result)));
             results[i].sum ^= tasklet_result.sum;
             if (tasklet_result.cycles > results[i].cycles)
@@ -115,6 +109,6 @@ int main(int argc, char **argv)
     res = 0;
 
 err:
-    DPU_ASSERT(dpu_free(rank));
+    DPU_ASSERT(dpu_free(dpus));
     return res;
 }

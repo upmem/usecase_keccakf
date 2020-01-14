@@ -17,9 +17,11 @@ HOST_EXE    := $(BUILDDIR)/host_keccakf
 OUTPUT_FILE := $(BUILDDIR)/output.txt
 PLOTDATA_FILE := $(BUILDDIR)/plotdata.csv
 
+NR_TASKLETS := 16
+
 #Flags, Libraries and Includes
-DPU_CFLAGS  := -Wall -O2 -g
-HOST_CFLAGS := -std=c11 -Wall -O3 -g  -DDPU_BINARY="\"$(DPU_EXE)\"" $(shell $(PKG_CONFIG) --cflags dpu)
+DPU_CFLAGS  := -Wall -O2 -g -DNR_TASKLETS=$(NR_TASKLETS)
+HOST_CFLAGS := -std=c11 -Wall -O3 -g -DNR_TASKLETS=$(NR_TASKLETS) -DDPU_BINARY="\"$(DPU_EXE)\"" $(shell $(PKG_CONFIG) --cflags dpu)
 HOST_LIB    := $(shell $(PKG_CONFIG) --libs dpu)
 
 # Ensure directories exist
