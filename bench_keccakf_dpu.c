@@ -24,13 +24,14 @@
 // $(grep -v DML bench_keccakf_tuned.cpp|md5sum) should print 94f847f1628a2df91ff2d623ed523a25
 
 #include "keccakf_dpu_params.h"
+#include <attributes.h>
 #include <defs.h>
 #include <perfcounter.h>
 #include <stdint.h>
 #include <stdio.h>
 
-struct dpu_params tasklet_params[NR_TASKLETS];
-struct dpu_result tasklet_results[NR_TASKLETS];
+__host struct dpu_params tasklet_params[NR_TASKLETS];
+__host struct dpu_result tasklet_results[NR_TASKLETS];
 
 typedef uint64_t u64;
 
